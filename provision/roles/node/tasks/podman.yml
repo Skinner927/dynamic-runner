@@ -1,0 +1,8 @@
+---
+
+- name: Install Podman
+  become: true
+  ansible.builtin.apt:
+    pkg:
+      - podman
+    state: present

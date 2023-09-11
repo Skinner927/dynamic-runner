@@ -1,0 +1,7 @@
+---
+# Main entrypoint for node roles
+
+- name: Provision Podman
+  when: node_podman
+  ansible.builtin.import_tasks:
+    file: podman.yml

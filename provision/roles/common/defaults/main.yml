@@ -1,0 +1,7 @@
+---
+common_authorized_keys: ''
+common_user: ansible
+
+# APT configuration
+apt_cache_valid_time: 86400  # 1 day
+apt_upgrade: true

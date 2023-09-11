@@ -1,0 +1,11 @@
+---
+
+- name: Common setup
+  hosts: all
+  roles:
+    - common
+
+- name: Node setup
+  hosts: node
+  roles:
+    - node

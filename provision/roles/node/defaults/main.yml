@@ -1,0 +1,4 @@
+---
+node_podman: true
+node_qemu: true
+node_leader: false

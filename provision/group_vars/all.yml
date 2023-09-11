@@ -1,0 +1,3 @@
+---
+common_user: "ansible"
+ansible_user: "{{ common_user }}"

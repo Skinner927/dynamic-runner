@@ -1,0 +1,68 @@
+---
+# Be aware, the tag `init` is used to mark initialization tasks that must be
+# run on a host before being able to run the whole playbook.
+
+- name: Initialization tasks
+  tags: "init"
+  block:
+    - name: Ensure common_user is defined
+      when: "not common_user"
+      ansible.builtin.fail:
+        msg: "common_user is not defined"
+
+    - name: Update APT & upgrade packages
+      become: true
+      ansible.builtin.apt:
+        upgrade: "{{ apt_upgrade | bool }}"
+        update_cache: true
+        cache_valid_time: "{{ apt_cache_valid_time | int }}"
+
+    - name: Install common packages
+      become: true
+      ansible.builtin.apt:
+        pkg:
+          - aptitude  # Apparently Ansible prefers aptitude over APT
+          - curl
+          - git
+          - sudo
+          - wget
+        state: present
+
+    - name: Ensure common_user group exists
+      become: true
+      ansible.builtin.group:
+        name: "{{ common_user }}"
+        state: present
+
+    - name: Ensure common_user exists
+      become: true
+      ansible.builtin.user:
+        name: "{{ common_user }}"
+        group: "{{ common_user }}"
+        create_home: true
+        shell: /bin/bash
+        generate_ssh_key: true
+        ssh_key_type: ed25519
+        password: "!"
+        update_password: always
+
+    - name: Set common_user's authorized_keys for SSH access
+      become: true
+      ansible.builtin.template:
+        owner: "{{ common_user }}"
+        group: "{{ common_user }}"
+        mode: "0600"
+        force: true
+        src: authorized_keys.j2
+        dest: "/home/{{ common_user }}/.ssh/authorized_keys"
+
+    - name: Ensure common_user can sudo without password
+      become: true
+      ansible.builtin.template:
+        owner: root
+        group: root
+        mode: "0600"
+        force: true
+        src: sudoers.j2
+        # yes literal common_user so if user changes we remove the old one
+        dest: "/etc/sudoers.d/common_user"
