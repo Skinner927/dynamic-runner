@@ -1,31 +1,162 @@
 ---
 
-- name: Verify /26 or larger
-  when: "node_net | ansible.utils.ipaddr('prefix') > 26"
-  ansible.builtin.fail:
-    msg: "node_net must be a /26 net or larger (larger being a smaller CIDR)"
-
 - name: Install network packages
   become: true
   ansible.builtin.apt:
     pkg:
+      # TODO: Do we need all these?
       - bridge-utils
-      - dnsmasq
-      - dnsmasq-utils
+      - net-tools
       - networkd-dispatcher
+      - openvswitch-switch
     state: present
 
-- name: Add bridge file
+- name: Ensure openvswitch is started
   become: true
-  ansible.builtin.template:
-    owner: root
-    group: root
-    mode: "0644"
-    src: bridge-network.yml.j2
-    dest: "/etc/netplan/node-bridge.yaml"
-  register: bridge_file
+  ansible.builtin.service:
+    name: openvswitch-switch
+    state: started
+    enabled: true
 
-- name: Netplan apply
+# - name: Create network namespaces
+#   become: true
+#   community.general.ip_netns:
+#     name: "{{ item }}"
+#     state: present
+#   loop:
+#     - "{{ node_net_tainer_ns }}"
+#     - "{{ node_net_vm_ns }}"
+
+# TODO: Do we have to make these in a namespace?
+#   ip netns exec { node_net_tainer_ns }} ovs-vsctl add-br { node_net_tainer_br }}
+- name: Create bridge
   become: true
-  ansible.builtin.shell: netplan apply
-  when: bridge_file.changed
+  openvswitch.openvswitch.openvswitch_bridge:
+    bridge: "{{ node_bridge }}"
+    state: present
+
+# TODO: Try iptables in/out full network range if no intercomms
+
+- name: Set bridge MTU
+  become: true
+  ansible.builtin.command: ip link set mtu {{ node_bridge_mtu }} dev {{ node_bridge }}
+
+- name: Set bridge address
+  block:
+    - name: Get current bridge address
+      ansible.builtin.shell: |
+        ip addr show dev {{ node_bridge }} | grep -q '{{ node_bridge_ip }}/{{ node_net_cidr }}'
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/bin:/sbin:/usr/sbin"
+      register: bridge_ip_check
+      failed_when: False
+      changed_when: False
+
+    - name: Set bridge address
+      become: true
+      when: bridge_ip_check.rc != 0
+      ansible.builtin.command: |
+        ip addr add {{ node_bridge_ip }}/{{ node_net_cidr }} dev {{ node_bridge }}
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/bin:/sbin:/usr/sbin"
+
+- name: Bring bridge up
+  become: true
+  ansible.builtin.command: ip link set dev {{ node_bridge }} up
+
+- name: Add port to bridge on leader
+  when: not node_leader
+  become: true
+  ansible.builtin.command: >-
+    ovs-vsctl --may-exist add-port {{ node_bridge }}
+    {{ node_bridge }}_{{ ansible_default_ipv4.address }}
+    -- set interface {{ node_bridge }}_{{ ansible_default_ipv4.address }}
+    type=vxlan options:remote_ip={{ ansible_default_ipv4.address }} options:key={{ node_vni }}
+    options:local_ip={{ node_leader_ip }}
+  delegate_to: "{{ node_leader_host }}"
+
+- name: Add port to bridge on follower
+  when: not node_leader
+  become: true
+  ansible.builtin.command: >-
+    ovs-vsctl --may-exist add-port {{ node_bridge }}
+    {{ node_bridge }}_{{ node_leader_ip }}
+    -- set interface {{ node_bridge }}_{{ node_leader_ip }}
+    type=vxlan options:remote_ip={{ node_leader_ip }} options:key={{ node_vni }}
+    options:local_ip={{ ansible_default_ipv4.address }}
+
+
+# - name: Create node_net_tainer_br port
+#   openvswitch.openvswitch.openvswitch_port:
+#     bridge: "{{ item.br }}"
+#     port: "{{ node_net_vxlan }}"
+#     tag: 10
+#     state: present
+#     set: Interface vlan10
+#   loop:
+#     - br: "{{ node_net_tainer_br }}"
+
+
+# TODO: If this is dropped, delete the template too
+# - name: Add bridge file
+#   become: true
+#   ansible.builtin.template:
+#     owner: root
+#     group: root
+#     mode: "0644"
+#     src: netplan-bridge-network.yml.j2
+#     dest: "/etc/netplan/node-bridge.yaml"
+#   notify: netplan
+
+# TODO: tmp
+# - name: Remove old bridge files
+#   become: true
+#   ansible.builtin.file:
+#     path: "/etc/netplan/node-bridge.yaml"
+#     state: absent
+
+# - name: Remove dnsmasq package
+#   become: true
+#   ansible.builtin.apt:
+#     pkg:
+#       - dnsmasq
+#       - dnsmasq-utils
+#       - dnsmasq-base
+#     state: absent
+
+
+- name: Install and configure dnsmasq
+  when: node_leader
+  become: true
+  block:
+    - name: Install dnsmasq
+      ansible.builtin.apt:
+        pkg:
+          - dnsmasq-base
+        state: present
+
+    - name: Create dnsmasq.conf
+      ansible.builtin.template:
+        src: dnsmasq.conf.j2
+        dest: /etc/dnsmasq.conf
+        owner: root
+        group: root
+        mode: "0644"
+      register: dnsmasq_conf
+
+    - name: Copy dnsmasq.service
+      ansible.builtin.copy:
+        src: dnsmasq.service
+        dest: /etc/systemd/system/dnsmasq.service
+        owner: root
+        group: root
+        mode: "0644"
+      register: dnsmasq_service
+
+    - name: Ensure dnsmasq service is running
+      when: dnsmasq_conf.changed or dnsmasq_service.changed
+      ansible.builtin.systemd:
+        name: dnsmasq.service
+        daemon_reload: true
+        state: restarted
+        enabled: true

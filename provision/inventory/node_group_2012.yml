@@ -2,18 +2,17 @@ all:
   children:
     node_group_2012:
       vars:
-        group: node_group_2012
+        node_group: node_group_2012
         vxlan_vni: 2012 # TODO: vxlan
 
-        node_net: 192.168.99.1/24
+        node_net: 172.16.12.0/24
 
       children:
         node:
           hosts:
             node_2012:
               ansible_host: 10.0.2.12
+              node_leader: true
+              node_gateway: 10.0.2.11 # TODO: IDK yet
             node_2013:
               ansible_host: 10.0.2.13
-        leader:
-          hosts:
-            node_2012:

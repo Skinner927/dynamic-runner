@@ -1,9 +1,19 @@
 ---
 # Deploy sample VM and container for sanity.
 
-- name: Run container
+- name: Make web index
+  become: true
+  ansible.builtin.shell: |
+    mkdir -p /tmp/webroot
+    echo '<html><body><h1>Hello from {{ ansible_default_ipv4.address }}</h1></body></html>' > /tmp/webroot/index.html
+    chmod +r /tmp/webroot/index.html
+
+
+- name: Run web container
   containers.podman.podman_container:
     name: nginx
     image: docker.io/nginx
     state: started
+    volumes:
+      - /tmp/webroot:/usr/share/nginx/html
     #generate_systemd:

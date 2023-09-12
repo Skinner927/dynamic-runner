@@ -1,6 +1,10 @@
 ---
 # Main entrypoint for node roles
 
+- name: Make variables for nodes
+  ansible.builtin.import_tasks:
+    file: node_variables.yml
+
 - name: Provision networking
   ansible.builtin.import_tasks:
     file: networking.yml

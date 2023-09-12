@@ -1,0 +1,32 @@
+---
+
+node_gateway_default: "{{ node_net | ansible.utils.nthhost(3) }}"
+node_dhcp_default: "{{ node_net | ansible.utils.nthhost(2) }}"
+node_dhcp_start_default: "{{ node_net | ansible.utils.nthhost(11) }}"
+node_dhcp_end_default: "{{ node_net | ansible.utils.nthhost(-5) }}"
+
+
+node_cidr: "{{ node_net | ansible.utils.ipaddr('prefix') }}"
+    node_gateway: "{{ node_gateway | default(node_gateway_default) }}"
+    node_dhcp: "{{ node_dhcp | default(node_dhcp_default) }}"
+    node_dhcp_start: "{{ node_dhcp_start | default(node_dhcp_start_default) }}"
+    node_dhcp_end: "{{ node_dhcp_end | default(node_dhcp_end_default) }}"
+    node_dns: "{{ node_dns | default(node_dhcp_default) }}"
+
+
+
+# No purpose overriding these unless you have reasons
+node_net_tainer_ns: nntainer
+node_net_vm_ns: nnvm
+node_net_tainer_br: brnntainer0
+node_net_vm_br: brnnvm0
+node_net_plane_br: brnnplane0
+node_net_vxlan: nodevxlan
+
+# Will be built in node_variables.yml
+# node_cidr  ("24" from "1.1.1.1/24")
+# node_gateway
+# node_dhcp
+# node_dhcp_(start|end)
+# node_dns
+# node_bridge_mtu

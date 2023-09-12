@@ -66,3 +66,4 @@
         src: sudoers.j2
         # yes literal common_user so if user changes we remove the old one
         dest: "/etc/sudoers.d/common_user"
+        validate: /usr/sbin/visudo -cf %s

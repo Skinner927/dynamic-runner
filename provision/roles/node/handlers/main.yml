@@ -1,0 +1,5 @@
+---
+- name: Netplan apply
+  become: true
+  ansible.builtin.shell: netplan apply
+  listen: netplan

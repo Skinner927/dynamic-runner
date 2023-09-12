@@ -3,4 +3,9 @@ node_podman: true
 node_qemu: true
 node_leader: false
 
-node_net_br0: nodenetbr0
+# node_net must be defined explicitly
+node_group: "{{ undef(hint='Set name of node group') }}"
+node_net: "{{ undef(hint='Set to a CIDR annotated network like 172.16.22.0/24') }}"
+
+node_bridge: br-nn
+node_vni: 6000
