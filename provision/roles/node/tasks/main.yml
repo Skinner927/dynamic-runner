@@ -1,7 +1,16 @@
 ---
 # Main entrypoint for node roles
 
+- name: Provision networking
+  ansible.builtin.import_tasks:
+    file: networking.yml
+
 - name: Provision Podman
   when: node_podman
   ansible.builtin.import_tasks:
     file: podman.yml
+
+- name: Provision QEMU
+  when: node_qemu
+  ansible.builtin.import_tasks:
+    file: qemu.yml

@@ -1,0 +1,31 @@
+---
+
+- name: Verify /26 or larger
+  when: "node_net | ansible.utils.ipaddr('prefix') > 26"
+  ansible.builtin.fail:
+    msg: "node_net must be a /26 net or larger (larger being a smaller CIDR)"
+
+- name: Install network packages
+  become: true
+  ansible.builtin.apt:
+    pkg:
+      - bridge-utils
+      - dnsmasq
+      - dnsmasq-utils
+      - networkd-dispatcher
+    state: present
+
+- name: Add bridge file
+  become: true
+  ansible.builtin.template:
+    owner: root
+    group: root
+    mode: "0644"
+    src: bridge-network.yml.j2
+    dest: "/etc/netplan/node-bridge.yaml"
+  register: bridge_file
+
+- name: Netplan apply
+  become: true
+  ansible.builtin.shell: netplan apply
+  when: bridge_file.changed

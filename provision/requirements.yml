@@ -1,0 +1,5 @@
+---
+collections:
+  # This may already be installed by default with ansible
+  - name: containers.podman
+    version: ">=1.10.2,<2.0.0"

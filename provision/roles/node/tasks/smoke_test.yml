@@ -1,0 +1,9 @@
+---
+# Deploy sample VM and container for sanity.
+
+- name: Run container
+  containers.podman.podman_container:
+    name: nginx
+    image: docker.io/nginx
+    state: started
+    #generate_systemd:

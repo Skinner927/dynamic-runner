@@ -1,0 +1,11 @@
+network:
+  bridges:
+    {{ node_net_br0 }}:
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - {{ node_net | ansible.utils.nthhost(1) }}/{{ node_net | ansible.utils.ipaddr('prefix') }}
+      routes:
+        - to: default
+          via: {{ node_net | ansible.utils.nthhost(1) }}
+      optional: true

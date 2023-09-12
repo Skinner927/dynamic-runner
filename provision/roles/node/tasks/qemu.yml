@@ -1,0 +1,15 @@
+---
+
+- name: Install QEMU
+  become: true
+  ansible.builtin.apt:
+    pkg:
+      - cpu-checker
+      - libvirt-clients
+      - qemu-system
+      - virtinst
+    state: present
+
+- name: Check if KVM available (which is required for QEMU)
+  become: true
+  ansible.builtin.shell: kvm-ok

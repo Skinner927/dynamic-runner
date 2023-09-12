@@ -28,7 +28,7 @@ ansible-playbook -k --ask-become-pass -i inventory site.yml -t init --limit node
 ## Regular run
 
 ```shell
-ansible-playbook -i inventory site.yml
+ansible-playbook -i inventory site.yml -v
 ```
 
 ## Debugging
