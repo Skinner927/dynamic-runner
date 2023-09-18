@@ -9,7 +9,14 @@
       - qemu-system
       - virtinst
     state: present
+  register: qemu_install
 
 - name: Check if KVM available (which is required for QEMU)
   become: true
+  when: qemu_install.changed
   ansible.builtin.shell: kvm-ok
+
+- name: QEMU dir exists
+  ansible.builtin.file:
+    state: directory
+    path: "{{ node_qemu_vm_dir }}"

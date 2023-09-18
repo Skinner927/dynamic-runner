@@ -2,19 +2,31 @@
 # Main entrypoint for node roles
 
 - name: Make variables for nodes
-  ansible.builtin.import_tasks:
-    file: node_variables.yml
+  ansible.builtin.import_tasks: node_variables.yml
+
+- name: Create node directory
+  ansible.builtin.file:
+    path: "{{ node_config_dir }}"
+    state: directory
+    mode: "u=rw,g=r,o=r"
 
 - name: Provision networking
-  ansible.builtin.import_tasks:
-    file: networking.yml
+  ansible.builtin.import_tasks: networking.yml
 
 - name: Provision Podman
   when: node_podman
-  ansible.builtin.import_tasks:
-    file: podman.yml
+  ansible.builtin.import_tasks: podman.yml
 
 - name: Provision QEMU
   when: node_qemu
-  ansible.builtin.import_tasks:
-    file: qemu.yml
+  ansible.builtin.import_tasks: qemu.yml
+
+- name: Install QEMU VMs
+  ansible.builtin.include_tasks: qemu-vm.yml
+  loop: "{{ node_qemu_vms }}"
+  loop_control:
+    loop_var: vm
+
+- name: Install smoke test
+  when: node_smoke_test
+  ansible.builtin.import_tasks: smoke_test.yml
