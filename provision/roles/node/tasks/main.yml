@@ -5,28 +5,36 @@
   ansible.builtin.import_tasks: node_variables.yml
 
 - name: Create node directory
+  become: true
   ansible.builtin.file:
     path: "{{ node_config_dir }}"
     state: directory
-    mode: "u=rw,g=r,o=r"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "u=rwX,g=rwX,o=rX"
 
 - name: Provision networking
   ansible.builtin.import_tasks: networking.yml
 
 - name: Provision Podman
+  tags: [podman]
   when: node_podman
   ansible.builtin.import_tasks: podman.yml
 
 - name: Provision QEMU
+  tags: [qemu]
   when: node_qemu
   ansible.builtin.import_tasks: qemu.yml
 
 - name: Install QEMU VMs
+  tags: [qemu]
   ansible.builtin.include_tasks: qemu-vm.yml
-  loop: "{{ node_qemu_vms }}"
+  when: node_qemu_vms | default(false) | bool
+  loop: "{{ node_qemu_vms | default([]) }}"
   loop_control:
     loop_var: vm
 
 - name: Install smoke test
-  when: node_smoke_test
+  tags: [qemu, podman]
+  when: node_smoke_test and node_podman and node_qemu
   ansible.builtin.import_tasks: smoke_test.yml

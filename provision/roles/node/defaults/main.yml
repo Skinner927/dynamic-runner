@@ -12,3 +12,18 @@ node_bridge: br-nn
 node_vni: 6000
 
 node_config_dir: /opt/dynode
+
+
+# QEMU
+node_qemu_dir: "{{ node_config_dir }}/qemu"
+node_qemu_vm_dir: "{{ node_qemu_dir }}/vms"
+node_qemu_dir_group: libvirt-qemu
+node_qemu_default_memory: 1024
+node_qemu_default_cpu: 1
+# virt-install --osinfo list
+node_qemu_default_os: linux2018
+node_qemu_default_network:
+  bridge: "{{ node_bridge }}"
+  model: virtio
+
+node_smoke_test_qemu_src_vm: qemu-images/tinycore.qcow2

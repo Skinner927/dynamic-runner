@@ -4,84 +4,94 @@
 #   - mem: Amount of memory in MiB or node_qemu_default_memory
 #   - cpu: Number of CPUs or node_qemu_default_cpu
 #   - arch: Defaults to host
-#   - os: Defaults to node_qemu_default_os
+#   - os: Defaults to node_qemu_default_os (virt-install --osinfo list)
 #   - os_variant: Defaults to node_qemu_default_os_variant
-#   - bridge: Network bridge name defaults to literal "default"
+#   - network: Define a network or fallback to node_qemu_default_network or false for no network
 
 
-# TODO: This should just be the ansible user's name
 - name: "Create VM dir: {{ vm.name }}"
   become: true
   ansible.builtin.file:
     state: directory
     path: "{{ node_qemu_vm_dir }}/{{ vm.name }}"
-    owner: "{{ node_qemu_user }}"
-    group: "{{ node_qemu_group }}"
-    mode: "u=rw,g=rw,o=r"
-  register: vm_dir
-
-- name: "Check if vm exists: {{ vm.name }}"
-  when: "not vm_dir.changed"
-  become: true
-  ansible.builtin.shell: |
-    set -eo pipefail
-    virsh list --all --name | grep -sq '^{{ vm.name }}$'
-  register: vm_exists
+    owner: "{{ ansible_user }}"
+    group: "{{ node_qemu_dir_group }}"
+    mode: "u=rwX,g=rwX,o="
+  register: node_qemu_vm_local_dir
 
 - name: "Checksum existing disk image: {{ vm.name }}"
-  when: "(vm_exists.rc | default(1)) == 0"
   become: true
+  when: "not node_qemu_vm_local_dir.changed"
   ansible.builtin.stat:
     path: "{{ node_qemu_vm_dir }}/{{ vm.name }}/{{ vm.name }}.qcow2"
     get_checksum: true
     checksum_algorithm: sha1
-  register: target_qcow
+  register: node_qemu_target_qcow
+
+- name: "Check if vm exists: {{ vm.name }}"
+  when: "node_qemu_target_qcow.stat.exists | default(false) | bool"
+  become: true
+  ansible.builtin.shell: |
+    virsh list --all --name \
+      | grep --no-messages --silent --line-regexp --fixed-strings '{{ vm.name }}'
+  ignore_errors: true
+  register: node_qemu_vm_exists
 
 - name: "Checksum local disk image: {{ vm.name }} = {{ vm.src }}"
-  when: "(vm_exists.rc | default(1)) == 0"
-  local_action:
-    ansible.builtin.stat:
-      path: "{{ vm.src }}"
-      get_checksum: true
-      checksum_algorithm: sha1
-  register: local_qcow
+  when: "node_qemu_target_qcow.stat.exists | default(false) | bool"
+  delegate_to: localhost
+  ansible.builtin.stat:
+    path: "{{ vm.src }}"
+    get_checksum: true
+    checksum_algorithm: sha1
+  register: node_qemu_local_qcow
 
 - name: "Delete existing VM: {{ vm.name }}"
   when: >-
-    ((target_qcow.stat.checksum | default('a'))
-      != (local_qcow.stat.checksum | default('b')))
+    ((node_qemu_vm_exists.rc | default(1)) == 0) and
+    (
+    (node_qemu_target_qcow.stat.checksum | default('a'))
+    != (node_qemu_local_qcow.stat.checksum | default('b'))
+    )
   become: true
   ansible.builtin.shell: |
     virsh destroy '{{ vm.name }}'
+    virsh undefine '{{ vm.name }}' --remove-all-storage
+  register: node_qemu_rm_vm
 
 - name: "Upload VM image: {{ vm.name }} = {{ vm.src }}"
-  when: >-
-    ((target_qcow.stat.checksum | default('a'))
-      != (local_qcow.stat.checksum | default('b')))
   become: true
+  when: >-
+    (
+    (node_qemu_target_qcow.stat.checksum | default('a'))
+    != (node_qemu_local_qcow.stat.checksum | default('b'))
+    )
   ansible.builtin.copy:
     src: "{{ vm.src }}"
     dest: "{{ node_qemu_vm_dir }}/{{ vm.name }}/{{ vm.name }}.qcow2"
-    owner: "{{ node_qemu_user }}"
-    group: "{{ node_qemu_group }}"
-    mode: "u=rw,g=rw,o=r"
-  register: upload_qcow
+    owner: "{{ ansible_user }}"
+    group: "{{ node_qemu_dir_group }}"
+    mode: "u=rwX,g=rwX,o="
+    backup: false
+  register: node_qemu_upload_qcow
 
 - name: "Create VM: {{ vm.name }}"
-  when: upload_qcow.changed
-  ansible.builtin.shell: |
-    set -eo pipefail
+  become: true
+  when: >-
+    (node_qemu_upload_qcow.changed | default(false)) or
+    (node_qemu_rm_vm.rc is defined) or
+    ((node_qemu_vm_exists.rc | default(1)) != 0)
+  ansible.builtin.shell: >
     virt-install
-      --noautoconsole
-      --name {{ vm.name }}
-      --memory {{ vm.mem | default(node_qemu_default_memory) }}
-      --vcpus  {{ vm.cpu | default(node_qemu_default_cpu) }}
-      --disk /virt/vms/{{ vm.name }}/{{ vm.name }}.qcow2,device=disk,bus=virtio
-      --disk /virt/vms/{{ vm.name }}/cloud-config.img,device=cdrom
-      --os-type {{ vm.os | default(node_qemu_default_os) }}
-      --os-variant {{ vm.os_variant | default(node_qemu_default_os_variant) }}
-      {{ ('--arch ' ~ vm.arch) if vm.arch else '' }}
-      --virt-type kvm
-      --graphics none
-      --network bridge={{ vm.bridge | default('default') }},model=virtio
-      --import
+    --noautoconsole
+    --name '{{ vm.name }}'
+    --memory '{{ vm.mem | default(node_qemu_default_memory) }}'
+    --vcpus  '{{ vm.cpu | default(node_qemu_default_cpu) }}'
+    --disk '{{ node_qemu_vm_dir }}/{{ vm.name }}/{{ vm.name }}.qcow2,device=disk,bus=virtio'
+    --osinfo '{{ vm.os | default(node_qemu_default_os) }}'
+    {{ ("--arch '" ~ vm.arch ~ "'") if (vm.arch | default('')) }}
+    --virt-type kvm
+    --graphics none
+    {{ ("--network '" ~ (vm.bridge | default(node_qemu_default_network) | items | map('join', '=') | join(',')) ~ "'") if vm.bridge | default(true) }}
+    --import
+    --transient

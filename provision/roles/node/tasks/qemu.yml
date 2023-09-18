@@ -4,19 +4,48 @@
   become: true
   ansible.builtin.apt:
     pkg:
+      - bridge-utils
       - cpu-checker
       - libvirt-clients
+      - libvirt-daemon
+      - libvirt-daemon-system
+      - qemu-kvm
       - qemu-system
       - virtinst
     state: present
   register: qemu_install
+
+# - name: Add user to libvirt group
+#   become: true
+#   ansible.builtin.user:
+#     name: "{{ ansible_user }}"
+#     groups: libvirt
+#     append: true
+
+# # It's apparently impossible to "when" this
+# - name: Reset ssh connection to allow user changes to affect ansible user
+#   ansible.builtin.meta: reset_connection
 
 - name: Check if KVM available (which is required for QEMU)
   become: true
   when: qemu_install.changed
   ansible.builtin.shell: kvm-ok
 
-- name: QEMU dir exists
+- name: Node qemu dir exists
+  become: true
   ansible.builtin.file:
     state: directory
-    path: "{{ node_qemu_vm_dir }}"
+    path: "{{ item }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ node_qemu_dir_group }}"
+    mode: "u=rwX,g=rwX,o=rX"
+  loop:
+    - "{{ node_qemu_dir }}"
+    - "{{ node_qemu_vm_dir }}"
+
+- name: Ensure default bridge is running
+  become: true
+  ansible.builtin.shell: |
+    virsh net-autostart default
+    # Might already be started
+    virsh net-start default || true
